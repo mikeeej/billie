@@ -19,19 +19,16 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@v4
 
-      # 检查上次同步状态
-      - name: 检查上次同步状态
-        id: check_last_commit
+      # 初始化 .last_commit 文件（如果不存在）
+      - name: 初始化 .last_commit 文件
         run: |
-          # 读取上次同步的 commit
-          if [ -f ".last_commit" ]; then
-            LAST_COMMIT=$(cat .last_commit)
-            echo "找到上次同步的 commit: $LAST_COMMIT"
-          else
-            echo "未找到 .last_commit 文件，可能是第一次运行"
-            LAST_COMMIT=""
+          if [ ! -f ".last_commit" ]; then
+            echo "初始化 .last_commit 文件"
+            echo "" > .last_commit
+            git add .last_commit
+            git commit -m "🔄 初始化 .last_commit"
+            git push
           fi
-          echo "LAST_COMMIT=$LAST_COMMIT" >> $GITHUB_ENV
 
       # 获取远程最新 commit
       - name: 获取远程 Worker 最新 commit
@@ -55,7 +52,7 @@ jobs:
 
       # 同步文件
       - name: 同步 Worker 文件
-        if: env.LAST_COMMIT != env.LATEST_COMMIT
+        if: env.LATEST_COMMIT != $(cat .last_commit)
         run: |
           log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"; }
 
@@ -72,7 +69,7 @@ jobs:
 
       # 提交并推送更改
       - name: 提交并推送更改
-        if: env.LAST_COMMIT != env.LATEST_COMMIT
+        if: env.LATEST_COMMIT != $(cat .last_commit)
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "🔄 自动同步 _worker.js (Commit: ${{ env.LATEST_COMMIT }})"
@@ -83,6 +80,6 @@ jobs:
 
       # 无需同步时输出提示
       - name: 无需同步提示
-        if: env.LAST_COMMIT == env.LATEST_COMMIT
+        if: env.LATEST_COMMIT == $(cat .last_commit)
         run: |
           echo "已是最新版本，无需同步。"
