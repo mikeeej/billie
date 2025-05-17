@@ -63,9 +63,6 @@ jobs:
         with:
           commit_message: "🔄 自动同步 _worker.js (Commit: ${{ env.LATEST_COMMIT }})"
           commit_author: "github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
-          file_pattern: |
-            _worker.js
-            last_commit.txt
 
       - name: 无需同步提示
         if: env.LAST_COMMIT == env.LATEST_COMMIT
