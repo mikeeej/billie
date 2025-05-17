@@ -1,0 +1,84 @@
+name: Auto Sync Worker
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 每天凌晨3点运行
+  workflow_dispatch: # 手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  sync_worker:
+    runs-on: ubuntu-latest
+    steps:
+      # 检出当前仓库
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      # 检查上次同步的 commit
+      - name: 检查上次同步状态
+        id: check_last_commit
+        run: |
+          # 读取上次同步的 commit
+          if [ -f ".last_commit" ]; then
+            LAST_COMMIT=$(cat .last_commit)
+            echo "找到上次同步的 commit: $LAST_COMMIT"
+          else
+            echo "未找到 .last_commit 文件，可能是第一次运行"
+            LAST_COMMIT=""
+          fi
+          echo "LAST_COMMIT=$LAST_COMMIT" >> $GITHUB_ENV
+
+      # 获取远程最新 commit
+      - name: 获取远程 Worker 最新 commit
+        id: get_latest_commit
+        env:
+          REPO_URL: "https://api.github.com/repos/yonggekkk/Cloudflare_vless_trojan"
+        run: |
+          log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"; }
+
+          # 获取最新 commit hash
+          log "获取远程最新 _worker.js commit..."
+          LATEST_COMMIT=$(curl -s --retry 3 "$REPO_URL/commits?path=Vless_workers_pages/_worker.js&per_page=1" | jq -r '.[0].sha' || echo "error")
+          
+          if [ "$LATEST_COMMIT" = "error" ]; then
+            log "ERROR: 无法获取远程 commit 信息"
+            exit 1
+          fi
+
+          echo "LATEST_COMMIT=$LATEST_COMMIT" >> $GITHUB_ENV
+          echo "latest_commit=$LATEST_COMMIT" >> $GITHUB_ENV
+
+          log "最新 commit: $LATEST_COMMIT"
+
+      # 同步文件
+      - name: 同步 Worker 文件
+        if: env.LAST_COMMIT != env.LATEST_COMMIT
+        run: |
+          log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"; }
+
+          # 下载最新的 _worker.js
+          log "开始下载 _worker.js..."
+          curl -s --retry 3 -o Vless_workers_pages/_worker.js https://raw.githubusercontent.com/yonggekkk/Cloudflare_vless_trojan/main/Vless_workers_pages/_worker.js
+          
+          # 记录最新的 commit
+          echo "$LATEST_COMMIT" > .last_commit
+          log "下载完成，记录最新 commit: $LATEST_COMMIT"
+
+      # 提交更改
+      - name: 提交并推送更改
+        if: env.LAST_COMMIT != env.LATEST_COMMIT
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "🔄 自动同步 _worker.js (Commit: ${{ env.latest_commit }})"
+          commit_author: "github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+          file_pattern: |
+            Vless_workers_pages/_worker.js
+            .last_commit
+
+      # 无需同步时输出提示
+      - name: 无需同步提示
+        if: env.LAST_COMMIT == env.LATEST_COMMIT
+        run: |
+          echo "已是最新版本，无需同步。"
